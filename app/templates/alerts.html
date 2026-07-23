@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Alertas{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Alertas</h4>
+  <div class="form-check form-switch">
+    <input class="form-check-input" type="checkbox" id="only-open" checked>
+    <label class="form-check-label small" for="only-open">Solo abiertas</label>
+  </div>
+</div>
+
+<div class="card p-0">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead><tr class="text-secondary small text-uppercase">
+        <th class="ps-3">Nivel</th><th>Tipo</th><th>Nodo</th><th>Mensaje</th><th>Fecha</th><th></th>
+      </tr></thead>
+      <tbody id="alerts-body"><tr><td colspan="6" class="p-3 text-secondary">Cargando…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function load() {
+  const open = document.getElementById("only-open").checked;
+  const alerts = await VG.api("/api/alerts" + (open ? "?open=true" : ""));
+  const body = document.getElementById("alerts-body");
+  if (!alerts.length) { body.innerHTML = '<tr><td colspan="6" class="p-3 text-secondary">Sin alertas 🎉</td></tr>'; return; }
+  body.innerHTML = alerts.map((a) => `
+    <tr class="${a.acknowledged ? 'opacity-50' : ''}">
+      <td class="ps-3"><span class="badge ${VG.levelBadge(a.level)}">${a.level}</span></td>
+      <td>${a.type === "threshold" ? "Umbral plaga" : "Nodo offline"}</td>
+      <td><a href="/nodes/${a.node_id}" class="fw-semibold">${a.node_id}</a></td>
+      <td class="text-secondary">${a.message}</td>
+      <td class="text-secondary text-nowrap">${VG.fmtDate(a.timestamp)}</td>
+      <td>${a.acknowledged ? '<span class="text-secondary small">✓ atendida</span>'
+            : `<button class="btn btn-sm btn-outline-light" data-ack="${a.id}">Marcar atendida</button>`}</td>
+    </tr>`).join("");
+
+  body.querySelectorAll("[data-ack]").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      await VG.api(`/api/alerts/${btn.dataset.ack}/ack`, { method: "POST" });
+      await load(); VG.updateAlertBadge();
+    }));
+}
+document.getElementById("only-open").addEventListener("change", load);
+load();
+</script>
+{% endblock %}

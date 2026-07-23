@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Galería{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+  <h4 class="mb-0">Galería de capturas</h4>
+  <div class="d-flex gap-2">
+    <select id="f-node" class="form-select form-select-sm" style="width:auto">
+      <option value="">Todos los nodos</option>
+      {% for n in nodes %}<option value="{{ n.node_id }}">{{ n.node_id }}</option>{% endfor %}
+    </select>
+    <select id="f-species" class="form-select form-select-sm" style="width:auto">
+      <option value="">Todas las especies</option>
+      {% for s in species %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+    </select>
+  </div>
+</div>
+
+<div id="grid" class="gallery-grid"></div>
+
+<!-- Modal detalle -->
+<div class="modal fade" id="capModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header"><h6 class="modal-title" id="capTitle"></h6>
+        <button class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body text-center">
+        <img id="capImg" class="img-fluid rounded" style="max-height:70vh">
+        <div id="capMeta" class="mt-2 text-secondary small"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let modal;
+async function load() {
+  const node = document.getElementById("f-node").value;
+  const species = document.getElementById("f-species").value;
+  let url = "/api/captures?limit=120";
+  if (node) url += "&node=" + node;
+  if (species) url += "&species=" + encodeURIComponent(species);
+  const caps = await VG.api(url);
+  const grid = document.getElementById("grid");
+  grid.innerHTML = caps.length ? caps.map((c) => `
+    <div class="card gallery-card" data-id="${c.id}">
+      <img loading="lazy" src="${c.annotated_url || c.image_url}">
+      <div class="meta">
+        <div class="fw-semibold">${c.node_id}</div>
+        <div class="text-secondary">${VG.fmtDate(c.timestamp)}</div>
+        <div>🐛 ${c.detection_count} · ${c.species || "—"}
+          ${c.confidence != null ? `<span class="text-secondary">(${(c.confidence*100).toFixed(0)}%)</span>` : ""}</div>
+      </div>
+    </div>`).join("") : '<div class="text-secondary">No hay capturas con esos filtros.</div>';
+
+  grid.querySelectorAll(".gallery-card").forEach((el) =>
+    el.addEventListener("click", () => openDetail(el.dataset.id)));
+}
+
+async function openDetail(id) {
+  const c = await VG.api(`/api/captures/${id}`);
+  document.getElementById("capTitle").textContent = `${c.node_id} · ${VG.fmtDate(c.timestamp)}`;
+  document.getElementById("capImg").src = c.annotated_url || c.image_url;
+  document.getElementById("capMeta").innerHTML =
+    `Detecciones: <b>${c.detection_count}</b> · Especie: <b>${c.species || "—"}</b> · ` +
+    `Confianza: ${c.confidence != null ? (c.confidence*100).toFixed(0)+"%" : "—"} · Estado IA: ${c.status}`;
+  modal = modal || new bootstrap.Modal(document.getElementById("capModal"));
+  modal.show();
+}
+
+document.getElementById("f-node").addEventListener("change", load);
+document.getElementById("f-species").addEventListener("change", load);
+load();
+</script>
+{% endblock %}

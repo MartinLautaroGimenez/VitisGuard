@@ -1,0 +1,4 @@
+# Backend YOLO real (agrega ultralytics + torch). Instalar sobre requirements.txt.
+# Recomendado: Python 3.11 o 3.12 (torch suele no publicar wheels para 3.14 aún).
+-r requirements.txt
+ultralytics>=8.3

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Nodos{% endblock %}
+
+{% block content %}
+<h4 class="mb-3">Nodos de campo</h4>
+<div class="card p-0">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr class="text-secondary small text-uppercase">
+          <th class="ps-3">Estado</th><th>ID</th><th>Nombre</th><th>Finca</th>
+          <th>Último reporte</th><th>Batería</th><th>Alertas</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="nodes-body"><tr><td colspan="8" class="text-secondary p-3">Cargando…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadNodes() {
+  const nodes = await VG.api("/api/nodes");
+  const body = document.getElementById("nodes-body");
+  if (!nodes.length) { body.innerHTML = '<tr><td colspan="8" class="p-3 text-secondary">No hay nodos. Corré <code>python scripts/seed_db.py</code>.</td></tr>'; return; }
+  body.innerHTML = nodes.map((n) => {
+    const info = VG.statusInfo(n.status);
+    return `<tr>
+      <td class="ps-3"><span class="dot dot-${n.status}"></span>${info.label}</td>
+      <td class="fw-semibold">${n.node_id}</td>
+      <td>${n.name}</td>
+      <td class="text-secondary">${n.finca}</td>
+      <td class="text-secondary">${VG.fmtDate(n.last_seen)}</td>
+      <td>${n.battery_v != null ? n.battery_v.toFixed(2) + " V" : "—"}</td>
+      <td>${n.open_alerts > 0 ? `<span class="badge text-bg-danger">${n.open_alerts}</span>` : "—"}</td>
+      <td><a class="btn btn-sm btn-outline-light" href="/nodes/${n.node_id}">Detalle</a></td>
+    </tr>`;
+  }).join("");
+}
+loadNodes();
+</script>
+{% endblock %}

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Reportes{% endblock %}
+
+{% block content %}
+<h4 class="mb-3">Reportes y exportación</h4>
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card p-4">
+      <div class="section-title">Exportar CSV</div>
+      <form id="export-form">
+        <div class="mb-3">
+          <label class="form-label small">Tipo de datos</label>
+          <select name="type" class="form-select">
+            <option value="readings">Lecturas ambientales (temp/humedad)</option>
+            <option value="captures">Capturas de plaga</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small">Nodo</label>
+          <select name="node" class="form-select">
+            <option value="">Todos los nodos</option>
+            {% for n in nodes %}<option value="{{ n.node_id }}">{{ n.node_id }} — {{ n.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small">Rango</label>
+          <select name="days" class="form-select">
+            <option value="7">Últimos 7 días</option>
+            <option value="30" selected>Últimos 30 días</option>
+            <option value="90">Últimos 90 días</option>
+            <option value="365">Último año</option>
+          </select>
+        </div>
+        <button class="btn btn-success"><span class="me-1">⬇</span> Descargar CSV</button>
+      </form>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card p-4 h-100">
+      <div class="section-title">Sobre los reportes</div>
+      <p class="text-secondary small mb-2">
+        Los reportes exportan las series históricas almacenadas en la base de datos de VitisGuard
+        en formato CSV, listo para abrir en Excel/LibreOffice o procesar con pandas.
+      </p>
+      <ul class="text-secondary small mb-0">
+        <li><b>Lecturas ambientales</b>: temperatura, humedad y batería por nodo.</li>
+        <li><b>Capturas de plaga</b>: conteo de <em>Lobesia botrana</em>, especie y confianza de la IA.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById("export-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const p = new URLSearchParams(new FormData(e.target)).toString();
+  window.location = "/reports/export.csv?" + p;
+});
+</script>
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ node.node_id }}{% endblock %}
+
+{% block content %}
+<nav class="small mb-2"><a href="{{ url_for('dashboard.nodes_page') }}" class="text-secondary">← Nodos</a></nav>
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="mb-1"><span class="dot dot-{{ node.status }}"></span>{{ node.node_id }} · {{ node.name }}</h4>
+    <div class="text-secondary small">{{ node.finca }} · {{ node.crop }}
+      {% if node.latitude %} · {{ "%.4f"|format(node.latitude) }}, {{ "%.4f"|format(node.longitude) }}{% endif %}
+    </div>
+  </div>
+  <div class="text-secondary small text-end">
+    Último reporte: {{ node.last_seen.strftime('%d/%m/%Y %H:%M') if node.last_seen else '—' }}<br>
+    Batería: {{ "%.2f V"|format(node.battery_v) if node.battery_v else '—' }}
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-6"><div class="card p-3"><div class="section-title">Temperatura y humedad (7 días)</div><div class="chart-box"><canvas id="envChart"></canvas></div></div></div>
+  <div class="col-lg-6"><div class="card p-3"><div class="section-title">Capturas por día (30 días)</div><div class="chart-box"><canvas id="capChart"></canvas></div></div></div>
+</div>
+
+<div class="row g-3 mt-0">
+  <div class="col-lg-8"><div class="card p-3"><div class="section-title">Capturas del nodo</div><div id="node-captures" class="gallery-grid"></div></div></div>
+  <div class="col-lg-4"><div class="card p-3"><div class="section-title">Alertas del nodo</div><div id="node-alerts" class="list-group list-group-flush small"></div></div></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const NODE_ID = "{{ node.node_id }}";
+const gridColor = "rgba(255,255,255,.06)";
+Chart.defaults.color = "#9c94ad";
+Chart.defaults.borderColor = gridColor;
+
+async function envChart() {
+  const rows = await VG.api(`/api/nodes/${NODE_ID}/readings?days=7`);
+  new Chart(document.getElementById("envChart"), {
+    type: "line",
+    data: {
+      labels: rows.map((r) => VG.fmtDate(r.timestamp)),
+      datasets: [
+        { label: "Temp (°C)", data: rows.map((r) => r.temperature), borderColor: "#3d9be0", backgroundColor: "rgba(61,155,224,.12)", tension: .3, yAxisID: "y", fill: true },
+        { label: "Humedad (%)", data: rows.map((r) => r.humidity), borderColor: "#4c9a2a", backgroundColor: "rgba(76,154,42,.10)", tension: .3, yAxisID: "y1" },
+      ],
+    },
+    options: { maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
+      scales: { x: { ticks: { maxTicksLimit: 6 } }, y: { position: "left" }, y1: { position: "right", grid: { drawOnChartArea: false } } } },
+  });
+}
+
+async function capChart() {
+  const rows = await VG.api(`/api/nodes/${NODE_ID}/captures-per-day?days=30`);
+  new Chart(document.getElementById("capChart"), {
+    type: "bar",
+    data: { labels: rows.map((r) => r.day), datasets: [{ label: "Capturas", data: rows.map((r) => r.count), backgroundColor: "#6f2dbd" }] },
+    options: { maintainAspectRatio: false, scales: { x: { ticks: { maxTicksLimit: 8 } } } },
+  });
+}
+
+async function nodeCaptures() {
+  const caps = await VG.api(`/api/captures?node=${NODE_ID}&limit=24`);
+  const box = document.getElementById("node-captures");
+  box.innerHTML = caps.length ? caps.map((c) => `
+    <div class="card gallery-card"><img loading="lazy" src="${c.annotated_url || c.image_url}">
+      <div class="meta"><div class="text-secondary">${VG.fmtDate(c.timestamp)}</div><div>🐛 ${c.detection_count} · ${c.species || "—"}</div></div></div>`).join("")
+    : '<div class="text-secondary">Sin capturas.</div>';
+}
+
+async function nodeAlerts() {
+  const all = await VG.api("/api/alerts");
+  const mine = all.filter((a) => a.node_id === NODE_ID).slice(0, 12);
+  const box = document.getElementById("node-alerts");
+  box.innerHTML = mine.length ? mine.map((a) => `
+    <div class="list-group-item px-0"><span class="badge ${VG.levelBadge(a.level)}">${a.level}</span>
+      <small class="text-secondary float-end">${VG.fmtDate(a.timestamp)}</small>
+      <div class="text-secondary mt-1">${a.message}</div></div>`).join("")
+    : '<div class="text-secondary py-2">Sin alertas.</div>';
+}
+
+envChart(); capChart(); nodeCaptures(); nodeAlerts();
+</script>
+{% endblock %}
