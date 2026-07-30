@@ -30,6 +30,10 @@ def main() -> None:
     p.add_argument("--imgsz", type=int, default=640)
     p.add_argument("--batch", type=int, default=16)
     p.add_argument("--device", default="", help="'cpu', '0', etc. (vacío = auto)")
+    p.add_argument("--workers", type=int, default=4)
+    # Pascal (GTX 1050) tiene FP16 muy lento -> AMP off por defecto. En GPUs
+    # modernas (tensor cores) conviene --amp para acelerar.
+    p.add_argument("--amp", action="store_true", help="activar mixed precision (FP16)")
     args = p.parse_args()
 
     from ultralytics import YOLO  # import perezoso (dependencia pesada)
@@ -38,6 +42,7 @@ def main() -> None:
     results = model.train(
         data=args.data, epochs=args.epochs, imgsz=args.imgsz,
         batch=args.batch, device=args.device or None,
+        workers=args.workers, amp=args.amp,
         project=str(Path(__file__).resolve().parent / "runs"),
         name="lobesia",
     )
