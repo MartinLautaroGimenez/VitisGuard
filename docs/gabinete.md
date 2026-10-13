@@ -19,6 +19,8 @@ se cambian piso y feromona como siempre.
          ▔▔ piso engomado ▔▔▔▔▔▔
 ```
 
+Soporte imprimible en 3D (paramétrico): [`hardware/soporte/`](../hardware/soporte/).
+
 ## Decisiones de diseño
 
 **Ventana de la cámara.** Agujero en el fondo de la caja con un vidrio o
@@ -31,8 +33,7 @@ separado de la lente por el aro de espuma. Luz difusa: un papel manteca o
 acrílico opal delante del LED evita brillos sobre la goma.
 
 **Altura.** La define el lente (ver [hardware.md](hardware.md#lente-y-altura-de-la-cámara)).
-Conviene que las planchuelas tengan agujeros chinos o varias perforaciones para
-ajustar la altura en el primer armado.
+En el soporte impreso se ajusta con el parámetro `alto_montante`.
 
 **Calor.** Una caja cerrada al sol en enero puede pasar los 60 °C por dentro.
 - Caja blanca + techo de sombra separado ~2 cm (el aire circula entre medio).

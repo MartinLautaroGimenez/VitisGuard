@@ -28,6 +28,7 @@ sin ir al campo.
 |-----------|--------|
 | `device/` | Software de la trampa: foto con LED, temperatura horaria, cola persistente, subida por 4G. Timers de systemd. |
 | `server/` | API + conteo de polillas + grados-día + panel web. |
+| `hardware/soporte/` | Soporte imprimible (OpenSCAD + STL) para montar la caja sobre la trampa. |
 | `docs/`   | [Hardware y BOM](docs/hardware.md), [gabinete](docs/gabinete.md), [modelo](docs/modelo.md), [ideas y contexto ISCAMEN](docs/iscamen.md). |
 
 ## Cómo funciona
