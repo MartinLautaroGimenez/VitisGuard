@@ -1,128 +1,81 @@
-# 🍇 VitisGuard
+# VitisGuard
 
-Sistema IoT de bajo costo para el **monitoreo de la polilla de la vid** (*Lobesia botrana*)
-en viñedos de Mendoza. Este repositorio contiene **toda la capa informática de servidor**
-consolidada en **Python + Flask**: ingesta de datos, almacenamiento, dashboard web,
-motor de alertas y el microservicio de clasificación por IA.
+Trampas delta conectadas para el monitoreo de **Lobesia botrana** (polilla de la vid) en Mendoza.
 
-> Proyecto REM · Taller AeroGlobETec · Escuela Técnica de la Universidad de Mendoza · 2026
+Cada trampa es una trampa delta estándar con feromona y piso engomado, más una
+Raspberry Pi con cámara mirando el piso y un módem 4G. Una vez por día saca una
+foto, la sube, y el servidor cuenta las polillas, calcula cuántas son nuevas y
+acumula grados-día para estimar en qué vuelo está la plaga.
 
----
-
-## Arquitectura
+El objetivo es que el monitoreo que hoy se hace recorriendo trampas a mano
+(ISCAMEN, técnicos de fincas) tenga datos **diarios**, en lugar de semanales,
+sin ir al campo.
 
 ```
- Nodo de campo (Raspberry Pi + cámara + DHT22 + SIM800L, solar)
-        │  HTTPS (JSON/base64 o multipart)     │  MQTT/TLS (telemetría + imagen b64)
-        ▼                                       ▼
- ┌─────────────────────────  SERVIDOR FLASK  ─────────────────────────┐
- │  /api/ingest (HTTP)   +   suscriptor MQTT   →  pipeline único       │
- │  → guarda imagen → Reading → [Microservicio IA] → Capture           │
- │  → motor de alertas (umbral / offline) → notificador                │
- │  Dashboard (mapa, gráficos, galería, reportes) + API JSON           │
- │  SQLite (data/vitisguard.db) + storage/images/                      │
- └─────────────────────────────────────────────────────────────────────┘
-        ▲
- Microservicio IA (FastAPI) — detector CV (ya) / YOLO11 (entrenable)
+┌──────────── trampa ────────────┐            ┌──────────── servidor ─────────────┐
+│ DS18B20 ──┐                    │            │                                   │
+│ cámara ───┤ Pi Zero ── 4G ─────┼── HTTPS ──▶│ FastAPI ─▶ conteo (OpenCV)        │
+│ LED ──────┘   cola en SD       │            │        ─▶ SQLite (capturas, °C)   │
+│ panel solar + batería          │            │        ─▶ grados-día / alertas    │
+└────────────────────────────────┘            │ panel web                         │
+                                              └───────────────────────────────────┘
 ```
 
-Componentes:
-- **Ingesta dual**: endpoint HTTP (`/api/ingest`) **y** suscriptor MQTT (Mosquitto/TLS),
-  ambos convergen en el mismo pipeline (`app/ingestion/service.py`).
-- **Almacenamiento**: SQLite vía SQLAlchemy; imágenes en `storage/images/`.
-- **Dashboard**: panel con KPIs, mapa de nodos (Leaflet), series temporales (Chart.js),
-  galería de capturas y exportación de reportes CSV. Librerías bundleadas → funciona offline.
-- **Alertas**: umbral de capturas por semana (default ≥5) y nodos sin reporte; notifica por
-  log/dashboard (activo) o email/WhatsApp (listos para activar).
-- **IA**: microservicio FastAPI aparte (`ai_service/`) con backend CV inmediato y camino a
-  YOLO11 entrenado. El core Flask lo consume por HTTP y degrada si no está disponible.
+## Qué hay en el repo
 
----
+| Carpeta   | Qué es |
+|-----------|--------|
+| `device/` | Software de la trampa: foto con LED, temperatura horaria, cola persistente, subida por 4G. Timers de systemd. |
+| `server/` | API + conteo de polillas + grados-día + panel web. |
+| `docs/`   | [Hardware y BOM](docs/hardware.md), [ideas y contexto ISCAMEN](docs/iscamen.md). |
 
-## Requisitos
-- Python 3.11+ (probado en 3.14) para el servidor Flask.
-- `mosquitto` (opcional, solo para la vía MQTT): `sudo pacman -S mosquitto` / `apt install mosquitto`.
-- Para el backend YOLO real: Python 3.11/3.12 recomendado (por torch).
+## Cómo funciona
 
----
+**En la trampa** (`device/`)
+- `vitisguard sample` cada hora: lee el DS18B20 y lo guarda localmente. No prende el módem.
+- `vitisguard run` una vez por día (10:00): prende el LED, saca la foto, la guarda en
+  la cola junto con las temperaturas acumuladas, prende el módem, espera red y sube
+  todo lo pendiente. Si no hay señal, queda en la cola para el día siguiente.
+- El módem se alimenta por un MOSFET y solo está prendido durante la subida:
+  es el consumidor más grande (picos de 2 A).
 
-## Puesta en marcha (servidor + demo, sin hardware)
+**En el servidor** (`server/`)
+- `POST /api/v1/captures`: recibe foto + metadatos con token por trampa. Es
+  idempotente (los reintentos no duplican).
+- Cuenta polillas con visión clásica (normalización de iluminación, umbral,
+  apertura morfológica para borrar la grilla, separación de grupos por área).
+- Las trampas **acumulan** polillas: lo que importa es `count_new` = total de hoy −
+  total de ayer. Si el total cae fuerte, se asume cambio de piso engomado.
+- Grados-día base 10 °C / corte 30 °C desde el 1/7, integrando las muestras horarias.
+- Alerta cuando las capturas nuevas de la semana superan un umbral configurable.
+
+## Arranque rápido (desarrollo)
 
 ```bash
-# 1) Entorno e instalación
-python -m venv .venv
-source .venv/bin/activate            # fish: source .venv/bin/activate.fish
-pip install -r requirements.txt
-cp .env.example .env                 # ajustá si querés
+# Servidor
+cd server
+pip install -e '.[dev]'
+pytest
+export VG_DATA_DIR=./data
+vitisguard-admin add-trap trampa-001 --name "Finca de prueba" --lat -33.03 --lon -68.88
+uvicorn --factory vitisguard_server.app:app_from_env --reload
+# panel en http://localhost:8000, API en http://localhost:8000/docs
 
-# 2) Datos de demostración (nodos + histórico + alertas)
-python scripts/seed_db.py
-
-# 3) Levantar el servidor
-python run.py                        # http://localhost:5000
-```
-
-Abrí **http://localhost:5000** → deberías ver el panel con el mapa de nodos de Mendoza,
-gráficos poblados, galería y alertas.
-
-### Inyectar datos en vivo (simulador de nodo)
-En otra terminal (con el venv activado):
-```bash
-# Envío periódico por HTTP de todos los nodos
-python scripts/simulate_node.py --transport http --interval 5
-
-# Ráfaga en un nodo para disparar la alerta por umbral
-python scripts/simulate_node.py --transport http --burst --node VG-001 --cycles 6 --interval 1
-```
-
-### Activar la IA (opcional, recomendado para la demo)
-```bash
-cd ai_service
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt      # backend CV, cuenta polillas ya
-uvicorn main:app --port 8001
-```
-Con la IA corriendo, las nuevas capturas muestran conteo, especie e imagen anotada.
-Para el modelo YOLO11 entrenado, ver [ai_service/README.md](ai_service/README.md).
-
-### Activar la vía MQTT (opcional)
-```bash
-bash mosquitto/gen_certs.sh                       # certificados TLS de dev
-mosquitto -c mosquitto/mosquitto.conf -v          # broker en :8883
-# En .env: MQTT_ENABLED=true   (y reiniciar run.py)
-python scripts/simulate_node.py --transport mqtt --mqtt-insecure --interval 8
-```
-
----
-
-## Estructura del proyecto
-```
-app/            core Flask (ingesta, modelos, alertas, dashboard, API)
-ai_service/     microservicio de IA (FastAPI + detector CV/YOLO11)
-scripts/        seed_db.py (histórico demo) + simulate_node.py (simulador)
-node_firmware/  firmware de referencia para la Raspberry Pi (SIM800L)
-mosquitto/      config del broker + generación de certificados TLS
-tests/          pruebas de ingesta y alertas
-```
-
-## Tests
-```bash
+# Trampa
+cd device
+pip install -e '.[dev]'
 pytest
 ```
 
-## Configuración
-Todas las opciones se ajustan por variables de entorno (ver [.env.example](.env.example)):
-umbrales de alerta, backend de notificación, URL de la IA, parámetros MQTT y de la base.
+En la Raspberry: `sudo ./device/install.sh` y completar `/etc/vitisguard/config.yaml`
+con el token que imprimió `vitisguard-admin`.
 
-## Endpoints principales
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| POST | `/api/ingest` | Ingesta del nodo (multipart o JSON+base64, auth Bearer) |
-| GET | `/api/stats/overview` | KPIs del panel |
-| GET | `/api/nodes` · `/api/nodes/<id>/readings` | Nodos y series |
-| GET | `/api/captures` · `/api/alerts` | Capturas y alertas |
-| GET | `/reports/export.csv` | Exportación CSV |
+## Estado y próximos pasos
 
----
-
-Licencia educativa — ETec UM.
+- [x] Software de la trampa con cola offline
+- [x] API, conteo clásico, grados-día, panel básico
+- [ ] Armar el primer prototipo físico y juntar fotos reales
+- [ ] Dataset etiquetado → detector entrenado (YOLO chico) que distinga Lobesia de otros insectos
+- [ ] Calibrar umbrales de vuelos y alertas con series históricas de ISCAMEN
+- [ ] Login en el panel, mapa de trampas, alertas por WhatsApp/Telegram
+- [ ] Telemetría de batería (INA219) y actualización remota del software

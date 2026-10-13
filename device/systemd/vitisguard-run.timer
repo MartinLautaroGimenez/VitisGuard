@@ -1,0 +1,11 @@
+[Unit]
+Description=VitisGuard - foto diaria
+
+[Timer]
+# Media mañana: buena luz ambiente, antes del calor fuerte. Hora local de la Pi.
+OnCalendar=*-*-* 10:00:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

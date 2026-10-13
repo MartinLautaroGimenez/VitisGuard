@@ -1,0 +1,9 @@
+[Unit]
+Description=VitisGuard - foto diaria y subida
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/vitisguard/venv/bin/python -m vitisguard_device run
+TimeoutStartSec=15min

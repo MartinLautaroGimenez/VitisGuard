@@ -1,0 +1,21 @@
+[project]
+name = "vitisguard-device"
+version = "0.1.0"
+description = "Software de la trampa VitisGuard (Raspberry Pi Zero W)"
+requires-python = ">=3.9"
+# En la Pi conviene instalarlas por apt (ver install.sh): compilar en ARMv6 es lentísimo.
+dependencies = ["requests", "pyyaml", "pyserial"]
+
+[project.optional-dependencies]
+pi = ["gpiozero"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+vitisguard = "vitisguard_device.main:main"
+
+[tool.setuptools]
+packages = ["vitisguard_device"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

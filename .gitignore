@@ -1,29 +1,9 @@
-# Python
 __pycache__/
-*.py[cod]
-.venv/
-.venv-ai/
-venv/
+*.pyc
 *.egg-info/
 .pytest_cache/
-
-# Config local
-.env
-
-# Datos generados en runtime
-data/
-storage/images/*
-!storage/images/.gitkeep
-
-# Certificados TLS
-certs/*
-!certs/.gitkeep
-
-# Pesos de modelos IA (pesados)
-ai_service/models/*.pt
-ai_service/runs/
-
-# SO / editor
-.DS_Store
-.idea/
-.vscode/
+.venv/
+venv/
+server/data/
+build/
+dist/

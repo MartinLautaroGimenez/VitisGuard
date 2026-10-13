@@ -1,0 +1,20 @@
+# Copiar a /etc/vitisguard/config.yaml (chmod 600: contiene el token)
+trap_id: trampa-001
+token: PEGAR_TOKEN_DE_vitisguard-admin
+server_url: https://vitisguard.example.com
+data_dir: /var/lib/vitisguard
+
+camera:
+  width: 2028          # HQ Camera / Camera Module 3 en modo binned
+  height: 1520
+  led_gpio: 17         # MOSFET del anillo LED; null si no hay
+  warmup_s: 1.0
+
+modem:
+  at_port: /dev/ttyUSB2   # SIM7600: ttyUSB2 = AT; null para no leer señal
+  baud: 115200
+  power_gpio: 27          # corta la alimentación del módem fuera de la ventana de subida
+  connect_timeout_s: 120
+
+outbox_max_items: 60
+upload_timeout_s: 90

@@ -1,0 +1,6 @@
+[Unit]
+Description=VitisGuard - muestra de temperatura
+
+[Service]
+Type=oneshot
+ExecStart=/opt/vitisguard/venv/bin/python -m vitisguard_device sample
