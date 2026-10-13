@@ -10,8 +10,9 @@ DEFAULT_PATH = Path("/etc/vitisguard/config.yaml")
 
 @dataclass
 class CameraConfig:
-    width: int = 2028
-    height: int = 1520
+    # OV5647 (Camera Module v1.3 y clones): 2592x1944 es la resolución completa.
+    width: int = 2592
+    height: int = 1944
     # GPIO (BCM) del MOSFET que prende el anillo LED; None = sin LED.
     led_gpio: int | None = 17
     warmup_s: float = 1.0
@@ -34,6 +35,8 @@ class Config:
     token: str
     server_url: str
     data_dir: Path = Path("/var/lib/vitisguard")
+    # "dht22" (temperatura + humedad) o "ds18b20" (solo temperatura).
+    sensor: str = "dht22"
     camera: CameraConfig = field(default_factory=CameraConfig)
     modem: ModemConfig = field(default_factory=ModemConfig)
     # Máximo de capturas en cola: protege la SD si el equipo pasa semanas sin señal.

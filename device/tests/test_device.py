@@ -5,7 +5,7 @@ import pytest
 
 from vitisguard_device import main as m
 from vitisguard_device.config import Config
-from vitisguard_device.hardware import read_ds18b20
+from vitisguard_device.hardware import Climate, read_dht22, read_ds18b20
 from vitisguard_device.modem import parse_csq
 from vitisguard_device.outbox import Outbox
 
@@ -36,6 +36,27 @@ def test_ds18b20_bad_crc_and_power_on_value(tmp_path):
     other = tmp_path / "other"
     other.mkdir()
     assert read_ds18b20(fake_w1(other, "xx : crc=e1 YES\nxx t=85000\n")) is None
+
+
+def fake_iio(tmp_path, temp, hum, name="dht11"):
+    d = tmp_path / "iio:device0"
+    d.mkdir()
+    (d / "name").write_text(name + "\n")
+    (d / "in_temp_input").write_text(temp)
+    (d / "in_humidityrelative_input").write_text(hum)
+    return tmp_path
+
+
+def test_dht22_ok(tmp_path):
+    c = read_dht22(fake_iio(tmp_path, "23400\n", "41700\n"), retries=1)
+    assert c == Climate(23.4, 41.7)
+
+
+def test_dht22_ignores_other_iio_devices_and_bad_reads(tmp_path):
+    assert read_dht22(fake_iio(tmp_path, "23400", "41700", name="ads1015"), retries=1) is None
+    other = tmp_path / "x"
+    other.mkdir()
+    assert read_dht22(fake_iio(other, "23400", "150000"), retries=2, wait_s=0) is None
 
 
 def make_image(tmp_path, name="img.jpg"):
@@ -79,7 +100,7 @@ def cfg(tmp_path):
 
 def test_capture_bundles_temperatures_and_liner_flag(cfg, tmp_path, monkeypatch):
     monkeypatch.setattr(m.hardware, "capture_still", lambda path, w, h: Path(path).write_bytes(b"jpg"))
-    monkeypatch.setattr(m.hardware, "read_ds18b20", lambda: 21.5)
+    monkeypatch.setattr(m.hardware, "read_climate", lambda sensor: Climate(21.5, 40.0))
     m.cmd_sample(cfg)
     m.cmd_sample(cfg)
     cfg.liner_flag.touch()
@@ -87,7 +108,7 @@ def test_capture_bundles_temperatures_and_liner_flag(cfg, tmp_path, monkeypatch)
     item = m.cmd_capture(cfg, Outbox(cfg.outbox_dir))
 
     meta = item.metadata
-    assert [s["c"] for s in meta["temperatures"]] == [21.5, 21.5]
+    assert [(s["c"], s["h"]) for s in meta["temperatures"]] == [(21.5, 40.0)] * 2
     assert meta["liner_changed"] is True
     assert meta["taken_at"].endswith("+00:00")
     assert not cfg.temperature_log.exists() and not cfg.liner_flag.exists()
@@ -98,5 +119,5 @@ def test_config_load(tmp_path):
     p.write_text("trap_id: a\ntoken: b\nserver_url: http://x\ndata_dir: /tmp/vg\n"
                  "camera: {led_gpio: null}\nmodem: {power_gpio: 5}\n")
     c = Config.load(p)
-    assert c.camera.led_gpio is None and c.camera.width == 2028
+    assert c.camera.led_gpio is None and c.camera.width == 2592
     assert c.modem.power_gpio == 5 and c.data_dir == Path("/tmp/vg")

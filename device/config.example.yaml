@@ -3,10 +3,11 @@ trap_id: trampa-001
 token: PEGAR_TOKEN_DE_vitisguard-admin
 server_url: https://vitisguard.example.com
 data_dir: /var/lib/vitisguard
+sensor: dht22          # o ds18b20
 
 camera:
-  width: 2028          # HQ Camera / Camera Module 3 en modo binned
-  height: 1520
+  width: 2592          # OV5647 (v1.3 / clones) a resolución completa
+  height: 1944
   led_gpio: 17         # MOSFET del anillo LED; null si no hay
   warmup_s: 1.0
 

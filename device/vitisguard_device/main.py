@@ -1,6 +1,6 @@
 """Punto de entrada. Lo disparan los timers de systemd:
 
-  vitisguard sample   cada hora: registra temperatura (no usa el módem)
+  vitisguard sample   cada hora: registra temperatura y humedad (no usa el módem)
   vitisguard run      una vez por día: foto + subida de todo lo pendiente
 """
 
@@ -28,14 +28,18 @@ def now_utc() -> datetime:
 
 
 def cmd_sample(cfg: Config) -> int:
-    celsius = hardware.read_ds18b20()
-    if celsius is None:
-        log.warning("sin lectura de temperatura")
+    climate = hardware.read_climate(cfg.sensor)
+    if climate is None:
+        log.warning("sin lectura del sensor %s", cfg.sensor)
         return 1
+    sample = {"t": now_utc().isoformat(), "c": climate.celsius}
+    if climate.humidity is not None:
+        sample["h"] = climate.humidity
     cfg.data_dir.mkdir(parents=True, exist_ok=True)
     with cfg.temperature_log.open("a") as f:
-        f.write(json.dumps({"t": now_utc().isoformat(), "c": celsius}) + "\n")
-    log.info("temperatura %.2f °C", celsius)
+        f.write(json.dumps(sample) + "\n")
+    log.info("temperatura %.1f °C, humedad %s", climate.celsius,
+             "—" if climate.humidity is None else f"{climate.humidity:.0f} %")
     return 0
 
 

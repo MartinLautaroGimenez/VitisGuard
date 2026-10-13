@@ -49,6 +49,7 @@ def test_new_captures_are_the_difference(env):
     assert post(client, token, 3, T0).json()["count_new"] == 3
     r = post(client, token, 7, T0 + timedelta(days=1)).json()
     assert (r["count_total"], r["count_new"]) == (7, 4)
+    assert r["detector"] == "classic"
 
 
 def test_retry_is_idempotent(env):
@@ -68,7 +69,7 @@ def test_liner_change_detected_by_drop(env):
 
 def test_summary_degree_days_and_alert(env):
     client, token = env
-    temps = [{"t": (T0 - timedelta(hours=h)).isoformat(), "c": 20.0} for h in range(24)]
+    temps = [{"t": (T0 - timedelta(hours=h)).isoformat(), "c": 20.0, "h": 35.0} for h in range(24)]
     post(client, token, 2, T0, temperatures=temps)
     post(client, token, 6, T0 + timedelta(days=1))
     s = client.get("/api/v1/traps/trampa-001/summary", params={"today": "2026-10-13"}).json()
@@ -76,6 +77,8 @@ def test_summary_degree_days_and_alert(env):
     assert s["this_week"] == 6
     assert s["alert"] is True
     assert s["season_start"] == date(2026, 7, 1).isoformat()
+    conn = client.app.state.db
+    assert conn.execute("SELECT COUNT(*) FROM temperatures WHERE humidity = 35").fetchone()[0] == 24
 
 
 def test_list_traps_shows_last_capture(env):

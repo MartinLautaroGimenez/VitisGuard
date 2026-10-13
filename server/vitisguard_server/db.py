@@ -27,12 +27,14 @@ CREATE TABLE IF NOT EXISTS captures (
     signal_csq     INTEGER,
     battery_v      REAL,
     firmware       TEXT,
+    detector       TEXT,
     UNIQUE (trap_id, taken_at)
 );
 CREATE TABLE IF NOT EXISTS temperatures (
     trap_id      TEXT NOT NULL REFERENCES traps(id),
     measured_at  TEXT NOT NULL,
     celsius      REAL NOT NULL,
+    humidity     REAL,
     PRIMARY KEY (trap_id, measured_at)
 );
 """

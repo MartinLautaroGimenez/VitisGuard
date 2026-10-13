@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
 from . import db
-from .detection import annotate, count_moths
+from .detection import annotate, load_counter
 from .phenology import MENDOZA, GenerationModel, daily_degree_days, season_start
 from .settings import Settings
 
@@ -29,6 +29,7 @@ LINER_DROP_MIN_PREVIOUS = 5
 class TemperatureSample(BaseModel):
     t: datetime
     c: float = Field(ge=-30, le=70)
+    h: float | None = Field(default=None, ge=0, le=100)  # humedad relativa (DHT22)
 
 
 class CaptureMetadata(BaseModel):
@@ -55,6 +56,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings.media_dir.mkdir(parents=True, exist_ok=True)
     conn = db.connect(settings.db_path)
     model = GenerationModel()
+    counter = load_counter(settings.model_path, settings.model_conf, settings.model_imgsz)
 
     app = FastAPI(title="VitisGuard", version="0.1.0")
     app.state.settings = settings
@@ -109,7 +111,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if img is None:
             raise HTTPException(422, "la imagen no se pudo decodificar")
 
-        result = count_moths(img)
+        result = counter(img)
         prev = conn.execute(
             "SELECT count_total FROM captures WHERE trap_id = ? AND taken_at < ? "
             "ORDER BY taken_at DESC LIMIT 1",
@@ -133,16 +135,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         with conn:
             cur = conn.execute(
                 "INSERT INTO captures (trap_id, taken_at, image, annotated, count_total, count_new,"
-                " liner_changed, signal_csq, battery_v, firmware) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                " liner_changed, signal_csq, battery_v, firmware, detector)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (trap["id"], taken_at, f"{stem}.jpg", f"{stem}_det.jpg", result.count, count_new,
-                 int(liner_changed), meta.signal_csq, meta.battery_v, meta.firmware),
+                 int(liner_changed), meta.signal_csq, meta.battery_v, meta.firmware, counter.name),
             )
             conn.executemany(
-                "INSERT OR IGNORE INTO temperatures (trap_id, measured_at, celsius) VALUES (?,?,?)",
-                [(trap["id"], _utc(s.t), s.c) for s in meta.temperatures],
+                "INSERT OR IGNORE INTO temperatures (trap_id, measured_at, celsius, humidity)"
+                " VALUES (?,?,?,?)",
+                [(trap["id"], _utc(s.t), s.c, s.h) for s in meta.temperatures],
             )
         return {"capture_id": cur.lastrowid, "count_total": result.count,
-                "count_new": count_new, "liner_changed": liner_changed}
+                "count_new": count_new, "liner_changed": liner_changed, "detector": counter.name}
 
     def _trap_or_404(trap_id: str) -> sqlite3.Row:
         row = conn.execute("SELECT id, name, lat, lon FROM traps WHERE id = ?", (trap_id,)).fetchone()
@@ -166,7 +170,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def list_captures(trap_id: str, limit: int = 30):
         _trap_or_404(trap_id)
         rows = conn.execute(
-            "SELECT id, taken_at, count_total, count_new, liner_changed, signal_csq, battery_v,"
+            "SELECT id, taken_at, count_total, count_new, liner_changed, signal_csq, battery_v, detector,"
             " '/media/' || image AS image_url, '/media/' || annotated AS annotated_url"
             " FROM captures WHERE trap_id = ? ORDER BY taken_at DESC LIMIT ?",
             (trap_id, min(limit, 500)),

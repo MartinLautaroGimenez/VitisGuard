@@ -1,8 +1,9 @@
 """Conteo de polillas sobre el piso engomado de una trampa delta.
 
 El piso es blanco con una grilla impresa y las polillas son manchas
-oscuras de ~8 x 3 mm. El enfoque es clásico (sin red neuronal) para que
-funcione desde el día uno sin dataset etiquetado:
+oscuras de ~8 x 3 mm. El detector principal es YOLO (YoloCounter, al
+final). Este conteo clásico es el respaldo cuando no hay modelo o no está
+instalado ultralytics:
 
 1. Normalizar la iluminación dividiendo por un fondo estimado.
 2. Umbralizar lo oscuro.
@@ -16,7 +17,9 @@ no depender de la resolución de la cámara.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -104,3 +107,50 @@ def annotate(image: np.ndarray, result: DetectionResult) -> np.ndarray:
     cv2.putText(out, f"Total: {result.count}", (20, 20 + 30 * thickness),
                 cv2.FONT_HERSHEY_SIMPLEX, thickness, (0, 0, 255), thickness * 2)
     return out
+
+
+class ClassicCounter:
+    """Conteo por visión clásica: no distingue Lobesia de otros insectos."""
+
+    name = "classic"
+
+    def __init__(self, params: DetectionParams = DetectionParams()):
+        self.params = params
+
+    def __call__(self, image: np.ndarray) -> DetectionResult:
+        return count_moths(image, self.params)
+
+
+class YoloCounter:
+    """Detector YOLO (Ultralytics) entrenado para Lobesia botrana.
+
+    Ultralytics y torch son pesados y opcionales: se importan acá para que el
+    servidor funcione sin ellos usando ClassicCounter.
+    """
+
+    def __init__(self, model_path: Path, conf: float = 0.4, imgsz: int = 960):
+        from ultralytics import YOLO
+
+        self.model = YOLO(str(model_path))
+        self.conf = conf
+        self.imgsz = imgsz
+        self.name = f"yolo:{Path(model_path).name}"
+
+    def __call__(self, image: np.ndarray) -> DetectionResult:
+        r = self.model.predict(image, imgsz=self.imgsz, conf=self.conf, verbose=False)[0]
+        detections = []
+        for x1, y1, x2, y2 in r.boxes.xyxy.cpu().numpy().astype(int):
+            detections.append(Detection(int(x1), int(y1), int(x2 - x1), int(y2 - y1),
+                                        float((x2 - x1) * (y2 - y1)), 1))
+        return DetectionResult(count=len(detections), detections=detections)
+
+
+def load_counter(model_path: Path | None, conf: float = 0.4, imgsz: int = 960):
+    if model_path is None:
+        return ClassicCounter()
+    try:
+        return YoloCounter(model_path, conf, imgsz)
+    except ImportError:
+        logging.getLogger(__name__).warning(
+            "ultralytics no está instalado; se usa el conteo clásico (pip install '.[yolo]')")
+        return ClassicCounter()

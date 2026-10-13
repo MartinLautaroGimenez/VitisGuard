@@ -1,4 +1,4 @@
-"""Cámara, LED y alimentación del módem. Todo degrada a no-op fuera de la Pi."""
+"""Cámara, LED, sensores y alimentación del módem. Degrada a no-op fuera de la Pi."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -43,6 +44,45 @@ def capture_still(path: Path, width: int, height: int) -> None:
            "--quality", "90", "-o", str(path)]
     log.debug("capturando: %s", " ".join(cmd))
     subprocess.run(cmd, check=True, capture_output=True, timeout=60)
+
+
+@dataclass(frozen=True)
+class Climate:
+    celsius: float
+    humidity: float | None = None
+
+
+def read_dht22(base: Path = Path("/sys/bus/iio/devices"), retries: int = 5,
+               wait_s: float = 2.5) -> Climate | None:
+    """Lee un DHT22 a través del driver del kernel (dtoverlay=dht11, sirve para DHT22).
+
+    El kernel resuelve los tiempos del protocolo; leerlo desde Python en una
+    Zero W de un núcleo falla seguido. Aun así hay lecturas con EIO/ETIMEDOUT,
+    por eso se reintenta respetando los 2 s mínimos entre lecturas del sensor.
+    """
+    for attempt in range(retries):
+        for dev in sorted(base.glob("iio:device*")):
+            try:
+                if (dev / "name").read_text().strip() != "dht11":
+                    continue
+                celsius = int((dev / "in_temp_input").read_text()) / 1000
+                humidity = int((dev / "in_humidityrelative_input").read_text()) / 1000
+            except (OSError, ValueError):
+                break
+            if -40 <= celsius <= 80 and 0 <= humidity <= 100:
+                return Climate(celsius, humidity)
+        if attempt + 1 < retries:
+            time.sleep(wait_s)
+    return None
+
+
+def read_climate(sensor: str) -> Climate | None:
+    if sensor == "dht22":
+        return read_dht22()
+    if sensor == "ds18b20":
+        celsius = read_ds18b20()
+        return None if celsius is None else Climate(celsius)
+    raise ValueError(f"sensor desconocido: {sensor}")
 
 
 def read_ds18b20(base: Path = Path("/sys/bus/w1/devices")) -> float | None:

@@ -52,3 +52,22 @@ def test_annotate_keeps_shape():
     moth(img, (400, 400), 0)
     out = annotate(img, count_moths(img))
     assert out.shape == img.shape
+
+
+def test_yolo_counter_with_bundled_model():
+    pytest.importorskip("ultralytics")
+    from vitisguard_server.detection import load_counter
+    from vitisguard_server.settings import DEFAULT_MODEL
+
+    counter = load_counter(DEFAULT_MODEL)
+    assert counter.name.startswith("yolo:")
+    img, _ = sticky_floor()
+    moth(img, (400, 400), 0)
+    # Manchas sintéticas no son polillas reales: el modelo no debería contarlas.
+    assert counter(img).count == 0
+
+
+def test_load_counter_without_model_is_classic():
+    from vitisguard_server.detection import load_counter
+
+    assert load_counter(None).name == "classic"
